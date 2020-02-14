@@ -19,19 +19,23 @@ concentration= 1
 RESULT_ROOT_DIR = './results'
 EXP_RESULT_ROOT_DIR = './experiment_conclude'
 CODE_ROOT_DIR= './src'
-def hasnan(t):
+def hasnan(t,ignore=False):
 	if torch.isnan(t).sum()>0:
 		print("HASSSNAN")
+		raise Exception("Nan has occured")
 		return True
 	return False
-def hasinf(t):
+def hasinf(t, ignore=False):
+	infs= False
 	if (t == -float('inf')).sum() >0:
 		print("HASSSINF")
-		return True
+		infs= True
 	if (t == float('inf')).sum() >0:
 		print("HASSSINF")
-		return True
-	return False
+		infs=True
+	if infs and not ignore:
+		raise Exception("Inf has occured")
+	return infs
 def boolprompt(question):
 	answer=''
 	while(answer.lower!='n' or answer.lower()!='y'):

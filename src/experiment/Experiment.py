@@ -5,7 +5,6 @@ from definition import *
 from typing import List,Dict,Tuple
 import pandas as pd
 import numpy as np
-import xlsxwriter as xl
 from abc import abstractmethod
 
 
@@ -82,15 +81,7 @@ class Experiment_(object):
 		lastepochstd = pd.DataFrame(lastepochstd.transpose(), columns=df.columns).to_dict('list')
 		return mean_traj_dict, var_traj_dict , lastepochmean,lastepochstd
 
-	def write_summary(self,last_mean_dict_list,last_std_dict_list,optslist:List[allOpts]):
-		with xl.Workbook(os.path.join(*[EXP_RESULT_ROOT_DIR,self.name,self.name+'.xlsx'])) as workbook:
 
-			for i,opt in enumerate(optslist):
-				dataset_name = opt.dataset_name
-				model_name = opt.model_name
-				last_mean_dict = last_mean_dict_list[i]
-				last_std_dict = last_std_dict_list[i]
-				raise NotImplementedError()
 
 	def force_create_path(self,pathlist:List[str]) -> Tuple[str,bool]:
 		full_path = ''
@@ -167,7 +158,15 @@ class Experiment_(object):
 			last_std_dict_list.append(last_std_dict)
 
 		torch.save( final_result_dict,os.path.join(self.result_dir,'result_dict.results'))
+		def load_setup(path:str)-> Epocher:
+			state = torch.load(path)
+			model_string = state['model_string']
+			model_state_dict = state['model_state']
+			optimizer_state_dicst = state['optimizer_state']
+			epoch= state['epoch']
 
+
+			Epocher()
 
 
 

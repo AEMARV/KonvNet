@@ -17,7 +17,7 @@ def boolprompt(question):
 if __name__ == '__main__':
 	# exp = NIN_Dropout(1)
 	# exp.run()
-	exp = VGG_Konv(1)
+	exp = KNN_QuickCIFAR_CIFAR10(1)
 	# exp = Synthetic_PMaps(1)
 	exp.run()
 

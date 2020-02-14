@@ -82,6 +82,8 @@ class Epocher(object):
 		maxind = -1
 		for i in range(length):
 			if paramlist[i].grad is None: continue
+			hasnan(paramlist[i].grad)
+			hasinf(paramlist[i].grad)
 			thisnorm = (paramlist[i].grad**2).sum()
 			totalnorm +=thisnorm
 			if thisnorm> maxnorm:
@@ -320,8 +322,9 @@ class Epocher(object):
 		entorpy = 0
 		totalsamples = 0
 		trials=0
-		thisNorm=0
+		thisNorm=torch.zeros(1)
 		ISNAN = False
+		self.optimizer.zero_grad()
 		self.model.train()
 
 		total_train_result = None
@@ -351,9 +354,9 @@ class Epocher(object):
 				trys= 1
 				# Exact
 				entropy = 0
-				output = self.model(inputs,drop=True,concentration=alpha)
+				output = self.model(inputs,drop=True,concentration=alpha)[0]
 				# output = alpha_lnorm(output,1,alpha)
-				output = output - ((alpha*output).logsumexp(dim=1,keepdim=True))/alpha
+				# output = output - ((alpha*output).logsumexp(dim=1,keepdim=True))/alpha
 				outputfull = output
 				output = output.view(-1, self.opts.dataopts.classnum)
 				loss = self.opts.optimizeropts.loss(output, labels).mean()
@@ -362,7 +365,7 @@ class Epocher(object):
 				output_conc= (output.detach()*alpha).log_softmax(dim=1)
 				loss_conc = self.opts.optimizeropts.loss(output_conc, labels).mean()
 
-			if batch_n % 4== 0:
+			if batch_n % 10000== 0:
 				self.model.print(fix_batch, epoch, batch_n)
 			thisNorm = self.block_grad(list(self.model.parameters()))
 			self.optimizer.step()
@@ -505,6 +508,7 @@ class Epocher(object):
 		self.path = path
 		print(path)
 		self.opts.print(printer=self.print)
+		totalepochs = self.opts.epocheropts.epochnum
 		for epoch in range(self.opts.epocheropts.epochnum):
 			prefixtext = 'Epoch %d' % epoch
 			epochres,outputsample = self.run_epoch(prefixtext,epoch,path)
@@ -515,6 +519,7 @@ class Epocher(object):
 				         'model_state':self.model.state_dict(),
 				         'opimizer_state': self.optimizer.state_dict(),
 				         'epoch':epoch}
+				if epoch% int(totalepochs/4)==0: torch.save(state,os.path.join(path,'epoch'+str(epoch)+'.model'))
 				torch.save(state,os.path.join(path,'final_model.model'))
 				torch.save(self.results.resultdict, os.path.join(path,'result_dict.res'))
 			self.opts.optimizeropts.lr_sched.step()

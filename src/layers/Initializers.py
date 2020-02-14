@@ -1,9 +1,12 @@
 from torch import Tensor
 from src.layers.klfunctions import *
+import torch.nn.functional as F
+import torch.nn as nn
+import definition
 from definition import epsilon
-import torch
-from typing import Tuple
 
+import torch
+from typing import List,Tuple,Dict
 ''' Interface Class'''
 class Parameterizer(object):
 	def __init__(self,isstoch=False,isbinary=False,dtype=torch.float32, coef=1):
@@ -78,10 +81,10 @@ class LogParameter(Parameterizer):
 		return lognorm
 	def get_log_prior(self,k):
 		return -(k.abs()).sum()
-	def get_log_kernel(self,k:Tensor)->Tuple[Tensor,Tensor]:
-		norm = k.logsumexp(dim=self.normaxis,keepdim=True)
+	def get_log_kernel(self,k:Tensor)->Tuple[Tensor]:
+		#k = (k.abs()/k.abs().sum(dim=self.normaxis,keepdim=True) + definition.epsilon).log()#*float(math.log(k.shape[self.normaxis]))
 		k =  k- k.logsumexp(dim=self.normaxis,keepdim=True)
-		return k,norm
+		return k
 	def get_prob_kernel(self,k:Tensor)->Tensor:
 		k = self.get_log_kernel(k)
 		k = k.exp()
@@ -113,7 +116,7 @@ class LogParameterProjector(LogParameter):
 	def __init__(self,*args,**kwargs):
 		super(LogParameterProjector,self).__init__(*args,**kwargs)
 	def get_log_kernel(self,k:Tensor):
-		k = k - self.get_log_norm(k).detach()
+		k = k - self.get_log_norm(k).detach_()
 		return k
 class NormalParameter(Parameterizer):
 	def __init__(self, **kwargs):
@@ -163,12 +166,13 @@ class SphereParameter(Parameterizer):
 		#out = out.clamp(epsilon, 1)
 		if isbias:
 			out = out
-		out = out * self.coef
-		# out = out/(out**2).sum(dim=self.normaxis,keepdim=True).sqrt()
-		return out.detach()
+		out = out**self.coef
+		out = out/(out**2).sum(dim=self.normaxis,keepdim=True).sqrt()
+		return (out).detach()
 	def get_log_prior(self,k):
 		return -(k**2).sum()
 	def get_log_norm(self,k:Tensor)->Tensor:
+		#lognorm = self.normfunc(2*((k.abs().clamp(epsilon,None)).log()),self.normaxis,1)
 		prob = k**2 + definition.epsilon
 		lognorm = prob.sum(dim=self.normaxis,keepdim=True).log()
 

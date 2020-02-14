@@ -87,6 +87,8 @@ def parse_layer_string(layer_string,in_n_channel,in_icnum,blockidx_dict):
 		stride = int(layer_opts['stride'])
 		init_type= (layer_opts['param'])
 		coef = float(layer_opts['coef'])
+		conc = float(layer_opts['conc'])
+		train_conc = bool(layer_opts['trainconc'])
 		isbiased = ((layer_opts['bias'] == '1')) if 'bias' in layer_opts.keys() else False
 		pad = layer_opts['pad']
 
@@ -97,6 +99,8 @@ def parse_layer_string(layer_string,in_n_channel,in_icnum,blockidx_dict):
 		               in_icnum,
 		               pad= pad,
 		               stride = stride,
+		               concentrate=conc,
+		               train_conc=train_conc,
 		               init_type=init_type,
 		               init_coef=coef,
 		               is_biased=isbiased,
@@ -111,10 +115,12 @@ def parse_layer_string(layer_string,in_n_channel,in_icnum,blockidx_dict):
 		stride = int(layer_opts['stride'])
 		init_type= (layer_opts['param'])
 		coef = float(layer_opts['coef'])
+		conc = float(layer_opts['conc'])
+		train_conc = bool(layer_opts['trainconc'])
 		isbiased = ((layer_opts['bias'] == '1')) if 'bias' in layer_opts.keys() else False
 		pad = layer_opts['pad']
 
-		layer = Konv_R(out_states,
+		layer = Konv_S(out_states,
 		               out_idcomp,
 		               ksize,
 		               in_n_channel,
@@ -122,6 +128,8 @@ def parse_layer_string(layer_string,in_n_channel,in_icnum,blockidx_dict):
 		               pad= pad,
 		               stride = stride,
 		               init_type=init_type,
+		               concentrate=conc,
+		               train_conc=train_conc,
 		               init_coef=coef,
 		               is_biased=isbiased,
 		              blockidx=blockidx)
@@ -132,7 +140,36 @@ def parse_layer_string(layer_string,in_n_channel,in_icnum,blockidx_dict):
 		layer = ToFiniteProb(blockidx=blockidx)
 		out_n_channel = 2
 		out_icnum = in_n_channel
-
+	elif layer_name_str == 'klconv_l':
+		ksize = int(layer_opts['r'])
+		fnum = int(layer_opts['f'])
+		indpt_components = int(layer_opts['icnum']) if 'icnum' in layer_opts.keys() else 1
+		stride = int(layer_opts['stride']) if 'stride' in layer_opts.keys() else 1
+		coef = float(layer_opts['coef'])
+		isbiased = ((layer_opts['bias']=='1')) if 'bias' in layer_opts.keys() else False
+		isrelu = bool(int(layer_opts['isrelu']))
+		drop_prob = float(layer_opts['droprate']) if 'droprate' in layer_opts.keys() else 0
+		#stride = int(layer_opts['stride'] if 'stride' in layer_opts.keys() else 1)
+		pad = layer_opts['pad']
+		stoch = bool(layer_opts['stoch']=='1') if 'stoch' in layer_opts else False
+		param = get_init(layer_opts['param'])
+		layer = KLConv_LEGACY(fnum=fnum,
+		               kersize=ksize,
+		               inp_chan_sz=in_n_channel,
+		               inp_icnum= in_icnum,
+		               icnum=indpt_components,
+		               isbiased=isbiased,
+		               isrelu=isrelu,
+		               biasinit=None,
+		               padding=pad,
+		               paraminit=param,
+		               isstoch=stoch,
+		               coefinit=coef,
+		               stride=stride,
+		               drop_rate = drop_prob,
+		               blockidx=blockidx)
+		out_n_channel = fnum
+		out_icnum= indpt_components
 
 
 

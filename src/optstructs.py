@@ -5,13 +5,22 @@ from src.datautils.synthetic import *
 '''Model Imports'''
 def print_section(symbol='*',printer=print):
 	printer(symbol*100)
-class allOpts(object):
+class opt(object):
+	def __init__(self):
+		pass
+
+	def to_dict(self):
+		raise Exception('Not implemented')
+	def load_from_dict(self,dictionary:dict):
+		raise Exception('Not implemented')
+class allOpts(opt):
 	def __init__(self,
 	             name,
 	             netopts=None,
 	             optimizeropts=None,
 	             epocheropts=None,
 	             dataopts=None):
+		super(allOpts,self).__init__()
 		self.name = name
 		self.netopts = netopts
 		self.optimizeropts = optimizeropts
@@ -29,10 +38,23 @@ class allOpts(object):
 		self.optimizeropts.print(printer=printer)
 
 
+	def to_dict(self):
+		out = dict(name=self.name,
+		           netopts=self.netopts.to_dict(),
+		           optimizeropts=self.optimizeropts.to_dict(),
+		           datasetopts= self.dataopts.to_dict(),
+		           epocheropts= self.epocheropts.to_dict()
+
+		           )
+	def load_from_dict(self,state_dict:dict):
+		self.name = state_dict['name']
+		self.netopts = NetOpts().load_from_dict(state_dict['netopts'])
+		self.optimizeropts = OptimOpts().load_from_dict(state_dict['optimizeropts'])
+		self.dataopts = DataOpts().load_from_dict(state_dict['datasetopts'])
+		self.epocheropts = EpocherOpts().load_from_dict(state_dict['epocheropts'])
 
 
-
-class EpocherOpts(object):
+class EpocherOpts(opt):
 	def __init__(self,
 	             save_results,
 	             epochnum=150,
@@ -54,7 +76,7 @@ class EpocherOpts(object):
 			self.device = torch.device("cpu")
 
 
-class NetOpts(object):
+class NetOpts(opt):
 	''' Weight and bias init has the form
 		lambda x: x.zero_()'''
 	def __init__(self,modelstring,
@@ -90,7 +112,7 @@ class NetOpts(object):
 			printer('\n')
 
 
-class OptimOpts(object):
+class OptimOpts(opt):
 	def __init__(self,lr=1,
 	             lr_sched_lambda = None,
 	             type='SGD',
@@ -121,7 +143,7 @@ class OptimOpts(object):
 		printer(self.weight_decay,end=' ')
 		printer("|")
 
-class DataOpts(object):
+class DataOpts(opt):
 	def __init__(self,name,inputdim=0,outputdim=0,samplenum=0
 				 ):
 		self.datasetname=name
@@ -181,7 +203,7 @@ class DataOpts(object):
 		batchsz = opts.epocheropts.batchsz
 		isshuffle = opts.epocheropts.shuffledata
 		transform = transforms.Compose(
-			[transforms.ToTensor()] + opts.netopts.data_transforms)
+			( opts.netopts.data_transforms + [transforms.ToTensor()]))
 		# Construct loaders
 		trainset = tv.datasets.CIFAR10(PATH_DATA, train=True, download=True, transform=transform)
 		testset = tv.datasets.CIFAR10(PATH_DATA, train=False, download=True, transform=transform)
@@ -196,7 +218,7 @@ class DataOpts(object):
 		batchsz = opts.epocheropts.batchsz
 		isshuffle = opts.epocheropts.shuffledata
 		transform = transforms.Compose(
-			[transforms.ToTensor()] + opts.netopts.data_transforms)
+			reversed([transforms.ToTensor()] + opts.netopts.data_transforms))
 		# Construct loaders
 		trainset = tv.datasets.CIFAR100(PATH_DATA, train=True, download=True, transform=transform)
 		testset = tv.datasets.CIFAR100(PATH_DATA, train=False, download=True, transform=transform)

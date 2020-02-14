@@ -38,7 +38,7 @@ class StaticNet(MyModule):
 		for i,layer in enumerate(self.layerlist):
 
 			x= layer(x)
-		return x
+		return (x,1)
 
 
 	''' String Parsers'''
