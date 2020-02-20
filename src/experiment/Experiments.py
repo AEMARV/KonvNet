@@ -20,8 +20,7 @@ class KNN_VGG_CIFAR10(Experiment_):
 		                         gpu=True)
 		dataopt = DataOpts('cifar10')
 		model = self.KVGG_CIFAR10
-		for coef in [4,5,6,7,8,9]:
-				''' Alpha Regularzation'''
+		for coef in [4]:
 				model_opt, optim_opt = model(dataopt, weight_decay=0, init_coef=coef, lr=1,conc=1,conc_train=False)
 				experiment_name = model.__name__ + "|init_coef={}".format(coef)
 				opt = allOpts(experiment_name, netopts=model_opt, optimizeropts=optim_opt, epocheropts=epocheropt,
@@ -66,8 +65,8 @@ class KNN_VGG_CIFAR10(Experiment_):
 		model_string += konvrfixed+'r:3,f:{},pad:same,stride:1,bias:1,icnum:1'.format(ceil(scale*512) ) + d
 		model_string += konvrfixed+'r:3,f:{},pad:same,stride:1,bias:1,icnum:1'.format(ceil(scale*512) ) + d
 		model_string += 'klavgpool|r:2,pad:valid,stride:2'  + d
-		model_string += konvrfixed+'r:1,f:{},pad:same,stride:1,bias:0,icnum:1'.format(ceil(scale*512) ) + d
-		model_string += konvrfixed+'r:1,f:' + str(data_opts.classnum) + ',pad:valid,stride:1,bias:1' + d
+		model_string += konvrfixed+'r:1,f:{},pad:same,stride:1,bias:1,icnum:1'.format(ceil(scale*512) ) + d
+		model_string += konvrfixed+'r:1,f:' + str(data_opts.classnum) + ',pad:valid,stride:1,bias:0' + d
 
 
 
@@ -77,6 +76,105 @@ class KNN_VGG_CIFAR10(Experiment_):
 		'''LR SCHED'''
 		data_transforms =[]# [transforms.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5])]
 		lr_sched = constant_lr(init_lr=1)#vgg_lr
+
+		''' Net Options'''
+		netdict = dict(exact=True, divgreg=None, reg_coef=None, reg_mode=None, alphaPrior=1,val_iters=1)
+		opts_net = NetOpts(model_string,
+						   input_channelsize=dict([('chansz',3),("icnum",1)]),
+						   inputspatszvalidator=lambda x: x == 32,
+						   data_transforms=data_transforms,
+						   classicNet=False,
+						   weightinit=lambda x: x.normal_(0, 0.05),
+						   biasinit=lambda x: x.zero_(),
+						   customdict=netdict
+						   )
+
+		opts_optim = OptimOpts(lr=lr,
+							   lr_sched_lambda=lr_sched,
+							   type='SGD',
+							   momentum=0.9,
+							   weight_decay=weight_decay,
+							   dampening=0,
+							   nestrov=False,
+							   loss=NLLLoss(reduction='none')
+							   )
+
+		'''Optimizer Options'''
+
+		return opts_net, opts_optim
+
+
+class KNN_VGG_CIFAR10_NOBIAS_Conc(Experiment_):
+	''' The Konv_VGG network trained on CIFAR10 stripped of BN and Dropout
+	The network is trained with variations of Initialization Coefficent.
+
+	With Augmentation: Flipping images
+	'''
+	def collect_opts(self):
+		opt_list = []
+		epocheropt = EpocherOpts(self.save_results,
+		                         epochnum=150,
+		                         batchsz=128,
+		                         shuffledata=True,
+		                         numworkers=1,
+		                         gpu=True)
+		dataopt = DataOpts('cifar10')
+		model = self.KVGG_CIFAR10_NoBIAS_Conc
+		for conc in [1]:
+				''' Alpha Regularzation'''
+				model_opt, optim_opt = model(dataopt, weight_decay=1e-5, init_coef=4, lr=1,conc=conc,conc_train=0)
+				experiment_name = model.__name__ + "|conc={}".format(conc)
+				opt = allOpts(experiment_name, netopts=model_opt, optimizeropts=optim_opt, epocheropts=epocheropt,
+				              dataopts=dataopt)
+				opt_list.append(opt)
+
+
+		return opt_list
+	def KVGG_CIFAR10_NoBIAS_Conc(self,data_opts: DataOpts,
+							init_coef=0.1,
+	                        weight_decay=1e-4,
+							lr=0.01,
+	                        conc=1,
+	                 conc_train=0,
+							) -> Tuple[NetOpts, OptimOpts]:
+		scale=1
+		ceil = lambda x: str(math.ceil(x))
+		''' With no regularization diverges'''
+		model_string = ''
+		d = '->'
+		finish = 'fin'
+		konvrfixed = 'konvr|param:logd,conc:{},trainconc:{},cross:0,'.format(str(conc),str(conc_train))
+		konvsfixed = 'konvs|param:logd,coef:{},conc:{},trainconc:{},'.format(str(init_coef), str(conc),conc_train)
+		nl = 'relu'
+
+		model_string += 'tofin' + d
+		model_string += konvrfixed + 'r:3,f:{},pad:same,stride:1,bias:1,icnum:1,coef:{}'.format(ceil(scale * 64),4) + d
+		model_string += konvrfixed + 'r:3,f:{},pad:same,stride:1,bias:1,icnum:1,coef:{}'.format(ceil(scale * 64),4) + d
+		model_string += 'klavgpool|r:2,pad:valid,stride:2' + d
+		model_string += konvrfixed + 'r:3,f:{},pad:same,stride:1,bias:1,icnum:1,coef:{}'.format(ceil(scale * 128),4) + d
+		model_string += konvrfixed + 'r:3,f:{},pad:same,stride:1,bias:1,icnum:1,coef:{}'.format(ceil(scale * 128),4) + d
+		model_string += 'klavgpool|r:2,pad:valid,stride:2' + d
+		model_string += konvrfixed + 'r:3,f:{},pad:same,stride:1,bias:1,icnum:1,coef:{}'.format(ceil(scale * 256),4) + d
+		model_string += konvrfixed + 'r:3,f:{},pad:same,stride:1,bias:1,icnum:1,coef:{}'.format(ceil(scale * 256),4) + d
+		model_string += konvrfixed + 'r:3,f:{},pad:same,stride:1,bias:1,icnum:1,coef:{}'.format(ceil(scale * 256),4) + d
+		model_string += 'klavgpool|r:2,pad:valid,stride:2' + d
+		model_string += konvrfixed + 'r:3,f:{},pad:same,stride:1,bias:1,icnum:1,coef:{}'.format(ceil(scale * 512),4) + d
+		model_string += konvrfixed + 'r:3,f:{},pad:same,stride:1,bias:1,icnum:1,coef:{}'.format(ceil(scale * 512),4) + d
+		model_string += konvrfixed + 'r:3,f:{},pad:same,stride:1,bias:1,icnum:1,coef:{}'.format(ceil(scale * 512),4) + d
+		model_string += 'klavgpool|r:2,pad:valid,stride:2' + d
+		model_string += konvrfixed + 'r:3,f:{},pad:same,stride:1,bias:1,icnum:1,coef:{}'.format(ceil(scale * 512),4) + d
+		model_string += konvrfixed + 'r:3,f:{},pad:same,stride:1,bias:1,icnum:1,coef:{}'.format(ceil(scale * 512),4) + d
+		model_string += konvrfixed + 'r:3,f:{},pad:same,stride:1,bias:1,icnum:1,coef:{}'.format(ceil(scale * 512),4) + d
+		model_string += 'klavgpool|r:2,pad:valid,stride:2' + d
+		model_string += konvrfixed + 'r:1,f:{},pad:same,stride:1,bias:1,icnum:1,coef:{}'.format(ceil(scale * 512),4) + d
+		model_string += konvrfixed + 'r:1,f:' + str(data_opts.classnum) + ',pad:valid,stride:1,bias:0,coef:{}'.format(4) + d
+
+		model_string += finish
+
+		'''Data OPTs'''
+		'''LR SCHED'''
+		data_transforms =[]#[transforms.RandomHorizontalFlip(),transforms.RandomVerticalFlip()]
+		lr_sched = vgg_lr
 
 		''' Net Options'''
 		netdict = dict(exact=True, divgreg=None, reg_coef=None, reg_mode=None, alphaPrior=1,val_iters=1)
@@ -477,7 +575,7 @@ class KNN_QuickCIFAR_CIFAR10(Experiment_):
 		return opts_net, opts_optim
 
 
-class KNN_QuickCIFAR_CIFAR10(Experiment_):
+class KNN_QuickCIFAR_CIFAR100(Experiment_):
 	''' The Konv_VGG network trained on CIFAR10 stripped of BN and Dropout
 	The network is trained with variations of Initialization Coefficent.
 
@@ -491,8 +589,8 @@ class KNN_QuickCIFAR_CIFAR10(Experiment_):
 		                         shuffledata=True,
 		                         numworkers=1,
 		                         gpu=True)
-		dataopt = DataOpts('cifar10')
-		model = self.QC_CIFAR10
+		dataopt = DataOpts('cifar100')
+		model = self.QC_CIFAR100
 		for coef in [1,2,3,4]:
 				''' Alpha Regularzation'''
 				model_opt, optim_opt = model(dataopt, weight_decay=0, init_coef=coef, lr=1,conc=1,conc_train=False)
@@ -503,7 +601,7 @@ class KNN_QuickCIFAR_CIFAR10(Experiment_):
 
 
 		return opt_list
-	def QC_CIFAR10(self,data_opts: DataOpts,
+	def QC_CIFAR100(self,data_opts: DataOpts,
 							init_coef=0.1,
 	                        weight_decay=1e-4,
 							lr=0.01,
@@ -567,7 +665,7 @@ class KNN_QuickCIFAR_CIFAR10(Experiment_):
 ''' Baselines '''
 
 
-
+'''______________VGG______________'''
 
 class VGG_CIFAR10(Experiment_):
 	''' The Konv_VGG network trained on CIFAR10 stripped of BN and Dropout
@@ -584,18 +682,17 @@ class VGG_CIFAR10(Experiment_):
 		                         numworkers=1,
 		                         gpu=True)
 		dataopt = DataOpts('cifar10')
-		model = self.KVGG_CIFAR10
-		for coef in [4,5,6,7,8,9]:
-				''' Alpha Regularzation'''
-				model_opt, optim_opt = model(dataopt, weight_decay=0, init_coef=coef, lr=1,conc=1,conc_train=False)
-				experiment_name = model.__name__ + "|init_coef={}".format(coef)
-				opt = allOpts(experiment_name, netopts=model_opt, optimizeropts=optim_opt, epocheropts=epocheropt,
-				              dataopts=dataopt)
-				opt_list.append(opt)
+		model = self.VGG_CIFAR10
+		''' Alpha Regularzation'''
+		model_opt, optim_opt = model(dataopt, weight_decay=1e-4, init_coef=3e-2, lr=1e-2,conc=1,conc_train=False)
+		experiment_name = model.__name__
+		opt = allOpts(experiment_name, netopts=model_opt, optimizeropts=optim_opt, epocheropts=epocheropt,
+		              dataopts=dataopt)
+		opt_list.append(opt)
 
 
 		return opt_list
-	def KVGG_CIFAR10(self,data_opts: DataOpts,
+	def VGG_CIFAR10(self,data_opts: DataOpts,
 							init_coef=0.1,
 	                        weight_decay=1e-4,
 							lr=0.01,
@@ -608,31 +705,44 @@ class VGG_CIFAR10(Experiment_):
 		model_string = ''
 		d = '->'
 		finish = 'fin'
-		konvrfixed = 'konvr|param:logd,coef:{},conc:{},trainconc:{},isrelu:1,'.format(str(init_coef),str(conc),str(conc_train))
-		konvsfixed = 'konvs|param:logd,coef:{},conc:{},trainconc:{},'.format(str(init_coef), str(conc),conc_train)
+		conv = 'conv|param:logd,coef:{},'.format(str(init_coef))
 		nl = 'relu'
 
-		model_string += 'tofin' + d
-		model_string += konvrfixed+'r:3,f:{},pad:same,stride:1,bias:1,icnum:1'.format(ceil(scale*64) ) + d
-		model_string += konvrfixed+'r:3,f:{},pad:same,stride:1,bias:1,icnum:1'.format(ceil(scale*64) ) + d
-		model_string += 'klavgpool|r:2,pad:valid,stride:2' + d
-		model_string += konvrfixed+'r:3,f:{},pad:same,stride:1,bias:1,icnum:1'.format(ceil(scale*128) ) + d
-		model_string += konvrfixed+'r:3,f:{},pad:same,stride:1,bias:1,icnum:1'.format(ceil(scale*128) ) + d
-		model_string += 'klavgpool|r:2,pad:valid,stride:2'  + d
-		model_string += konvrfixed+'r:3,f:{},pad:same,stride:1,bias:1,icnum:1'.format(ceil(scale*256) ) + d
-		model_string += konvrfixed+'r:3,f:{},pad:same,stride:1,bias:1,icnum:1'.format(ceil(scale*256) ) + d
-		model_string += konvrfixed+'r:3,f:{},pad:same,stride:1,bias:1,icnum:1'.format(ceil(scale*256) ) + d
-		model_string += 'klavgpool|r:2,pad:valid,stride:2'  + d
-		model_string += konvrfixed+'r:3,f:{},pad:same,stride:1,bias:1,icnum:1'.format(ceil(scale*512) ) + d
-		model_string += konvrfixed+'r:3,f:{},pad:same,stride:1,bias:1,icnum:1'.format(ceil(scale*512) ) + d
-		model_string += konvrfixed+'r:3,f:{},pad:same,stride:1,bias:1,icnum:1'.format(ceil(scale*512) ) + d
-		model_string += 'klavgpool|r:2,pad:valid,stride:2'  + d
-		model_string += konvrfixed+'r:3,f:{},pad:same,stride:1,bias:1,icnum:1'.format(ceil(scale*512) ) + d
-		model_string += konvrfixed+'r:3,f:{},pad:same,stride:1,bias:1,icnum:1'.format(ceil(scale*512) ) + d
-		model_string += konvrfixed+'r:3,f:{},pad:same,stride:1,bias:1,icnum:1'.format(ceil(scale*512) ) + d
-		model_string += 'klavgpool|r:2,pad:valid,stride:2'  + d
-		model_string += konvrfixed+'r:1,f:{},pad:same,stride:1,bias:0,icnum:1'.format(ceil(scale*512) ) + d
-		model_string += konvrfixed+'r:1,f:' + str(data_opts.classnum) + ',pad:valid,stride:1,bias:1' + d
+		model_string += conv+'r:3,f:{},pad:same,stride:1,bias:1'.format(ceil(scale*64) ) + d + nl + d
+		model_string += 'bn' + d + 'dropout|p:0.3'+d
+		model_string += conv+'r:3,f:{},pad:same,stride:1,bias:1'.format(ceil(scale*64) ) + d + nl + d
+		model_string += 'maxpool|r:2,pad:valid,stride:2' + d
+
+		model_string += conv+'r:3,f:{},pad:same,stride:1,bias:1'.format(ceil(scale*128) ) + d + nl + d
+		model_string += 'bn' + d + 'dropout|p:0.4'+d
+		model_string += conv+'r:3,f:{},pad:same,stride:1,bias:1'.format(ceil(scale*128) ) + d + nl + d
+		model_string += 'maxpool|r:2,pad:valid,stride:2'  + d
+
+		model_string += conv+'r:3,f:{},pad:same,stride:1,bias:1'.format(ceil(scale*256) ) + d + nl + d
+		model_string += 'bn' + d + 'dropout|p:0.4' + d
+		model_string += conv+'r:3,f:{},pad:same,stride:1,bias:1'.format(ceil(scale*256) ) + d + nl + d
+		model_string += 'bn' + d + 'dropout|p:0.4' + d
+		model_string += conv+'r:3,f:{},pad:same,stride:1,bias:1'.format(ceil(scale*256) ) + d + nl + d
+		model_string += 'maxpool|r:2,pad:valid,stride:2'  + d
+
+		model_string += conv+'r:3,f:{},pad:same,stride:1,bias:1'.format(ceil(scale*512) ) + d + nl + d
+		model_string += 'bn' + d + 'dropout|p:0.4' + d
+		model_string += conv+'r:3,f:{},pad:same,stride:1,bias:1'.format(ceil(scale*512) ) + d + nl + d
+		model_string += 'bn' + d + 'dropout|p:0.4' + d
+		model_string += conv+'r:3,f:{},pad:same,stride:1,bias:1'.format(ceil(scale*512) ) + d + nl + d
+		model_string += 'maxpool|r:2,pad:valid,stride:2'  + d
+
+		model_string += conv+'r:3,f:{},pad:same,stride:1,bias:1'.format(ceil(scale*512) ) + d + nl + d
+		model_string += 'bn' + d + 'dropout|p:0.4' + d
+		model_string += conv+'r:3,f:{},pad:same,stride:1,bias:1'.format(ceil(scale*512) ) + d + nl + d
+		model_string += 'bn' + d + 'dropout|p:0.4' + d
+		model_string += conv+'r:3,f:{},pad:same,stride:1,bias:1'.format(ceil(scale*512) ) + d + nl + d
+		model_string += 'bn' + d
+		model_string += 'maxpool|r:2,pad:valid,stride:2'  + d
+
+		model_string += conv+'r:1,f:{},pad:same,stride:1,bias:0'.format(ceil(scale*512) ) + d + nl + d
+		model_string +=  'dropout|p:0.4' + d
+		model_string += conv+'r:1,f:' + str(data_opts.classnum) + ',pad:valid,stride:1,bias:1' + d
 
 
 
@@ -640,8 +750,8 @@ class VGG_CIFAR10(Experiment_):
 
 		'''Data OPTs'''
 		'''LR SCHED'''
-		data_transforms =[]# [transforms.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5])]
-		lr_sched = constant_lr(init_lr=1)#vgg_lr
+		data_transforms =[]
+		lr_sched = vgg_lr
 
 		''' Net Options'''
 		netdict = dict(exact=True, divgreg=None, reg_coef=None, reg_mode=None, alphaPrior=1,val_iters=1)
@@ -685,18 +795,17 @@ class VGG_CIFAR100(Experiment_):
 		                         numworkers=1,
 		                         gpu=True)
 		dataopt = DataOpts('cifar100')
-		model = self.KVGG_CIFAR100
-		for coef in [4,5,6,7,8,9]:
-				''' Alpha Regularzation'''
-				model_opt, optim_opt = model(dataopt, weight_decay=0, init_coef=coef, lr=1,conc=1,conc_train=False)
-				experiment_name = model.__name__ + "|init_coef={}".format(coef)
-				opt = allOpts(experiment_name, netopts=model_opt, optimizeropts=optim_opt, epocheropts=epocheropt,
-				              dataopts=dataopt)
-				opt_list.append(opt)
+		model = self.VGG_CIFAR100
+		''' Alpha Regularzation'''
+		model_opt, optim_opt = model(dataopt, weight_decay=1e-4, init_coef=3e-2, lr=1e-2,conc=1,conc_train=False)
+		experiment_name = model.__name__
+		opt = allOpts(experiment_name, netopts=model_opt, optimizeropts=optim_opt, epocheropts=epocheropt,
+		              dataopts=dataopt)
+		opt_list.append(opt)
 
 
 		return opt_list
-	def KVGG_CIFAR100(self,data_opts: DataOpts,
+	def VGG_CIFAR100(self,data_opts: DataOpts,
 							init_coef=0.1,
 	                        weight_decay=1e-4,
 							lr=0.01,
@@ -709,31 +818,44 @@ class VGG_CIFAR100(Experiment_):
 		model_string = ''
 		d = '->'
 		finish = 'fin'
-		konvrfixed = 'konvr|param:logd,coef:{},conc:{},trainconc:{},isrelu:1,'.format(str(init_coef),str(conc),str(conc_train))
-		konvsfixed = 'konvs|param:logd,coef:{},conc:{},trainconc:{},'.format(str(init_coef), str(conc),conc_train)
+		conv = 'conv|param:logd,coef:{},'.format(str(init_coef))
 		nl = 'relu'
 
-		model_string += 'tofin' + d
-		model_string += konvrfixed+'r:3,f:{},pad:same,stride:1,bias:1,icnum:1'.format(ceil(scale*64) ) + d
-		model_string += konvrfixed+'r:3,f:{},pad:same,stride:1,bias:1,icnum:1'.format(ceil(scale*64) ) + d
-		model_string += 'klavgpool|r:2,pad:valid,stride:2' + d
-		model_string += konvrfixed+'r:3,f:{},pad:same,stride:1,bias:1,icnum:1'.format(ceil(scale*128) ) + d
-		model_string += konvrfixed+'r:3,f:{},pad:same,stride:1,bias:1,icnum:1'.format(ceil(scale*128) ) + d
-		model_string += 'klavgpool|r:2,pad:valid,stride:2'  + d
-		model_string += konvrfixed+'r:3,f:{},pad:same,stride:1,bias:1,icnum:1'.format(ceil(scale*256) ) + d
-		model_string += konvrfixed+'r:3,f:{},pad:same,stride:1,bias:1,icnum:1'.format(ceil(scale*256) ) + d
-		model_string += konvrfixed+'r:3,f:{},pad:same,stride:1,bias:1,icnum:1'.format(ceil(scale*256) ) + d
-		model_string += 'klavgpool|r:2,pad:valid,stride:2'  + d
-		model_string += konvrfixed+'r:3,f:{},pad:same,stride:1,bias:1,icnum:1'.format(ceil(scale*512) ) + d
-		model_string += konvrfixed+'r:3,f:{},pad:same,stride:1,bias:1,icnum:1'.format(ceil(scale*512) ) + d
-		model_string += konvrfixed+'r:3,f:{},pad:same,stride:1,bias:1,icnum:1'.format(ceil(scale*512) ) + d
-		model_string += 'klavgpool|r:2,pad:valid,stride:2'  + d
-		model_string += konvrfixed+'r:3,f:{},pad:same,stride:1,bias:1,icnum:1'.format(ceil(scale*512) ) + d
-		model_string += konvrfixed+'r:3,f:{},pad:same,stride:1,bias:1,icnum:1'.format(ceil(scale*512) ) + d
-		model_string += konvrfixed+'r:3,f:{},pad:same,stride:1,bias:1,icnum:1'.format(ceil(scale*512) ) + d
-		model_string += 'klavgpool|r:2,pad:valid,stride:2'  + d
-		model_string += konvrfixed+'r:1,f:{},pad:same,stride:1,bias:0,icnum:1'.format(ceil(scale*512) ) + d
-		model_string += konvrfixed+'r:1,f:' + str(data_opts.classnum) + ',pad:valid,stride:1,bias:1' + d
+		model_string += conv+'r:3,f:{},pad:same,stride:1,bias:1'.format(ceil(scale*64) ) + d + nl + d
+		model_string += 'bn' + d + 'dropout|p:0.3'+d
+		model_string += conv+'r:3,f:{},pad:same,stride:1,bias:1'.format(ceil(scale*64) ) + d + nl + d
+		model_string += 'maxpool|r:2,pad:valid,stride:2' + d
+
+		model_string += conv+'r:3,f:{},pad:same,stride:1,bias:1'.format(ceil(scale*128) ) + d + nl + d
+		model_string += 'bn' + d + 'dropout|p:0.4'+d
+		model_string += conv+'r:3,f:{},pad:same,stride:1,bias:1'.format(ceil(scale*128) ) + d + nl + d
+		model_string += 'maxpool|r:2,pad:valid,stride:2'  + d
+
+		model_string += conv+'r:3,f:{},pad:same,stride:1,bias:1'.format(ceil(scale*256) ) + d + nl + d
+		model_string += 'bn' + d + 'dropout|p:0.4' + d
+		model_string += conv+'r:3,f:{},pad:same,stride:1,bias:1'.format(ceil(scale*256) ) + d + nl + d
+		model_string += 'bn' + d + 'dropout|p:0.4' + d
+		model_string += conv+'r:3,f:{},pad:same,stride:1,bias:1'.format(ceil(scale*256) ) + d + nl + d
+		model_string += 'maxpool|r:2,pad:valid,stride:2'  + d
+
+		model_string += conv+'r:3,f:{},pad:same,stride:1,bias:1'.format(ceil(scale*512) ) + d + nl + d
+		model_string += 'bn' + d + 'dropout|p:0.4' + d
+		model_string += conv+'r:3,f:{},pad:same,stride:1,bias:1'.format(ceil(scale*512) ) + d + nl + d
+		model_string += 'bn' + d + 'dropout|p:0.4' + d
+		model_string += conv+'r:3,f:{},pad:same,stride:1,bias:1'.format(ceil(scale*512) ) + d + nl + d
+		model_string += 'maxpool|r:2,pad:valid,stride:2'  + d
+
+		model_string += conv+'r:3,f:{},pad:same,stride:1,bias:1'.format(ceil(scale*512) ) + d + nl + d
+		model_string += 'bn' + d + 'dropout|p:0.4' + d
+		model_string += conv+'r:3,f:{},pad:same,stride:1,bias:1'.format(ceil(scale*512) ) + d + nl + d
+		model_string += 'bn' + d + 'dropout|p:0.4' + d
+		model_string += conv+'r:3,f:{},pad:same,stride:1,bias:1'.format(ceil(scale*512) ) + d + nl + d
+		model_string += 'bn' + d
+		model_string += 'maxpool|r:2,pad:valid,stride:2'  + d
+
+		model_string += conv+'r:1,f:{},pad:same,stride:1,bias:0'.format(ceil(scale*512) ) + d + nl + d
+		model_string +=  'dropout|p:0.4' + d
+		model_string += conv+'r:1,f:' + str(data_opts.classnum) + ',pad:valid,stride:1,bias:1' + d
 
 
 
@@ -741,8 +863,8 @@ class VGG_CIFAR100(Experiment_):
 
 		'''Data OPTs'''
 		'''LR SCHED'''
-		data_transforms =[]# [transforms.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5])]
-		lr_sched = constant_lr(init_lr=1)#vgg_lr
+		data_transforms =[]
+		lr_sched = vgg_lr
 
 		''' Net Options'''
 		netdict = dict(exact=True, divgreg=None, reg_coef=None, reg_mode=None, alphaPrior=1,val_iters=1)
@@ -770,6 +892,203 @@ class VGG_CIFAR100(Experiment_):
 
 		return opts_net, opts_optim
 
+
+'''VGG No BatchNorm No DropOut'''
+class VGG_NOBN_NODO_CIFAR10(Experiment_):
+	''' The Konv_VGG network trained on CIFAR10 stripped of BN and Dropout
+	The network is trained with variations of Initialization Coefficent.
+
+
+	'''
+	def collect_opts(self):
+		opt_list = []
+		epocheropt = EpocherOpts(self.save_results,
+		                         epochnum=150,
+		                         batchsz=128,
+		                         shuffledata=True,
+		                         numworkers=1,
+		                         gpu=True)
+		dataopt = DataOpts('cifar10')
+		model = self.VGG_NOBN_NODO_CIFAR10
+		''' Alpha Regularzation'''
+		model_opt, optim_opt = model(dataopt, weight_decay=1e-4, init_coef=3e-2, lr=1e-2,conc=1,conc_train=False)
+		experiment_name = model.__name__
+		opt = allOpts(experiment_name, netopts=model_opt, optimizeropts=optim_opt, epocheropts=epocheropt,
+		              dataopts=dataopt)
+		opt_list.append(opt)
+
+
+		return opt_list
+	def VGG_NOBN_NODO_CIFAR10(self,data_opts: DataOpts,
+							init_coef=0.1,
+	                        weight_decay=1e-4,
+							lr=0.01,
+	                        conc=1,
+	                 conc_train=False,
+							) -> Tuple[NetOpts, OptimOpts]:
+		scale=1
+		ceil = lambda x: str(math.ceil(x))
+		''' With no regularization diverges'''
+		model_string = ''
+		d = '->'
+		finish = 'fin'
+		conv = 'conv|param:logd,coef:{},'.format(str(init_coef))
+		nl = 'relu'
+
+		model_string += conv+'r:3,f:{},pad:same,stride:1,bias:1'.format(ceil(scale*64) ) + d + nl + d
+		model_string += conv+'r:3,f:{},pad:same,stride:1,bias:1'.format(ceil(scale*64) ) + d + nl + d
+		model_string += 'maxpool|r:2,pad:valid,stride:2' + d
+		model_string += conv+'r:3,f:{},pad:same,stride:1,bias:1'.format(ceil(scale*128) ) + d + nl + d
+		model_string += conv+'r:3,f:{},pad:same,stride:1,bias:1'.format(ceil(scale*128) ) + d + nl + d
+		model_string += 'maxpool|r:2,pad:valid,stride:2'  + d
+		model_string += conv+'r:3,f:{},pad:same,stride:1,bias:1'.format(ceil(scale*256) ) + d + nl + d
+		model_string += conv+'r:3,f:{},pad:same,stride:1,bias:1'.format(ceil(scale*256) ) + d + nl + d
+		model_string += conv+'r:3,f:{},pad:same,stride:1,bias:1'.format(ceil(scale*256) ) + d + nl + d
+		model_string += 'maxpool|r:2,pad:valid,stride:2'  + d
+		model_string += conv+'r:3,f:{},pad:same,stride:1,bias:1'.format(ceil(scale*512) ) + d + nl + d
+		model_string += conv+'r:3,f:{},pad:same,stride:1,bias:1'.format(ceil(scale*512) ) + d + nl + d
+		model_string += conv+'r:3,f:{},pad:same,stride:1,bias:1'.format(ceil(scale*512) ) + d + nl + d
+		model_string += 'maxpool|r:2,pad:valid,stride:2'  + d
+		model_string += conv+'r:3,f:{},pad:same,stride:1,bias:1'.format(ceil(scale*512) ) + d + nl + d
+		model_string += conv+'r:3,f:{},pad:same,stride:1,bias:1'.format(ceil(scale*512) ) + d + nl + d
+		model_string += conv+'r:3,f:{},pad:same,stride:1,bias:1'.format(ceil(scale*512) ) + d + nl + d
+		model_string += 'maxpool|r:2,pad:valid,stride:2'  + d
+		model_string += conv+'r:1,f:{},pad:same,stride:1,bias:0'.format(ceil(scale*512) ) + d + nl + d
+		model_string += conv+'r:1,f:' + str(data_opts.classnum) + ',pad:valid,stride:1,bias:1' + d
+
+
+
+		model_string += finish
+
+		'''Data OPTs'''
+		'''LR SCHED'''
+		data_transforms =[]
+		lr_sched = vgg_lr
+
+		''' Net Options'''
+		netdict = dict(exact=True, divgreg=None, reg_coef=None, reg_mode=None, alphaPrior=1,val_iters=1)
+		opts_net = NetOpts(model_string,
+						   input_channelsize=dict([('chansz',3),("icnum",1)]),
+						   inputspatszvalidator=lambda x: x == 32,
+						   data_transforms=data_transforms,
+						   classicNet=False,
+						   weightinit=lambda x: x.normal_(0, 0.05),
+						   biasinit=lambda x: x.zero_(),
+						   customdict=netdict
+						   )
+
+		opts_optim = OptimOpts(lr=lr,
+							   lr_sched_lambda=lr_sched,
+							   type='SGD',
+							   momentum=0.9,
+							   weight_decay=weight_decay,
+							   dampening=0,
+							   nestrov=False,
+							   loss=NLLLoss(reduction='none')
+							   )
+
+		'''Optimizer Options'''
+
+		return opts_net, opts_optim
+
+
+class VGG_NOBN_NODO_CIFAR100(Experiment_):
+	''' The Konv_VGG network trained on CIFAR10 stripped of BN and Dropout
+	The network is trained with variations of Initialization Coefficent.
+
+
+	'''
+	def collect_opts(self):
+		opt_list = []
+		epocheropt = EpocherOpts(self.save_results,
+		                         epochnum=150,
+		                         batchsz=128,
+		                         shuffledata=True,
+		                         numworkers=1,
+		                         gpu=True)
+		dataopt = DataOpts('cifar100')
+		model = self.VGG_NOBN_NODO_CIFAR100
+		''' Alpha Regularzation'''
+		model_opt, optim_opt = model(dataopt, weight_decay=1e-4, init_coef=3e-2, lr=1e-2)
+		experiment_name = model.__name__
+		opt = allOpts(experiment_name, netopts=model_opt, optimizeropts=optim_opt, epocheropts=epocheropt,
+		              dataopts=dataopt)
+		opt_list.append(opt)
+
+
+		return opt_list
+	def VGG_NOBN_NODO_CIFAR100(self,data_opts: DataOpts,
+							init_coef=0.1,
+	                        weight_decay=1e-4,
+							lr=0.01,
+							) -> Tuple[NetOpts, OptimOpts]:
+		scale=1
+		ceil = lambda x: str(math.ceil(x))
+		''' With no regularization diverges'''
+		model_string = ''
+		d = '->'
+		finish = 'fin'
+		conv = 'conv|param:logd,coef:{},'.format(str(init_coef))
+		nl = 'relu'
+
+		model_string += conv+'r:3,f:{},pad:same,stride:1,bias:1'.format(ceil(scale*64) ) + d + nl + d
+		model_string += conv+'r:3,f:{},pad:same,stride:1,bias:1'.format(ceil(scale*64) ) + d + nl + d
+		model_string += 'maxpool|r:2,pad:valid,stride:2' + d
+		model_string += conv+'r:3,f:{},pad:same,stride:1,bias:1'.format(ceil(scale*128) ) + d + nl + d
+		model_string += conv+'r:3,f:{},pad:same,stride:1,bias:1'.format(ceil(scale*128) ) + d + nl + d
+		model_string += 'maxpool|r:2,pad:valid,stride:2'  + d
+		model_string += conv+'r:3,f:{},pad:same,stride:1,bias:1'.format(ceil(scale*256) ) + d + nl + d
+		model_string += conv+'r:3,f:{},pad:same,stride:1,bias:1'.format(ceil(scale*256) ) + d + nl + d
+		model_string += conv+'r:3,f:{},pad:same,stride:1,bias:1'.format(ceil(scale*256) ) + d + nl + d
+		model_string += 'maxpool|r:2,pad:valid,stride:2'  + d
+		model_string += conv+'r:3,f:{},pad:same,stride:1,bias:1'.format(ceil(scale*512) ) + d + nl + d
+		model_string += conv+'r:3,f:{},pad:same,stride:1,bias:1'.format(ceil(scale*512) ) + d + nl + d
+		model_string += conv+'r:3,f:{},pad:same,stride:1,bias:1'.format(ceil(scale*512) ) + d + nl + d
+		model_string += 'maxpool|r:2,pad:valid,stride:2'  + d
+		model_string += conv+'r:3,f:{},pad:same,stride:1,bias:1'.format(ceil(scale*512) ) + d + nl + d
+		model_string += conv+'r:3,f:{},pad:same,stride:1,bias:1'.format(ceil(scale*512) ) + d + nl + d
+		model_string += conv+'r:3,f:{},pad:same,stride:1,bias:1'.format(ceil(scale*512) ) + d + nl + d
+		model_string += 'maxpool|r:2,pad:valid,stride:2'  + d
+		model_string += conv+'r:1,f:{},pad:same,stride:1,bias:0'.format(ceil(scale*512) ) + d + nl + d
+		model_string += conv+'r:1,f:' + str(data_opts.classnum) + ',pad:valid,stride:1,bias:1' + d
+
+
+
+		model_string += finish
+
+		'''Data OPTs'''
+		'''LR SCHED'''
+		data_transforms =[]
+		lr_sched = vgg_lr
+
+		''' Net Options'''
+		netdict = dict(exact=True, divgreg=None, reg_coef=None, reg_mode=None, alphaPrior=1,val_iters=1)
+		opts_net = NetOpts(model_string,
+						   input_channelsize=dict([('chansz',3),("icnum",1)]),
+						   inputspatszvalidator=lambda x: x == 32,
+						   data_transforms=data_transforms,
+						   classicNet=False,
+						   weightinit=lambda x: x.normal_(0, 0.05),
+						   biasinit=lambda x: x.zero_(),
+						   customdict=netdict
+						   )
+
+		opts_optim = OptimOpts(lr=lr,
+							   lr_sched_lambda=lr_sched,
+							   type='SGD',
+							   momentum=0.9,
+							   weight_decay=weight_decay,
+							   dampening=0,
+							   nestrov=False,
+							   loss=NLLLoss(reduction='none')
+							   )
+
+		'''Optimizer Options'''
+
+		return opts_net, opts_optim
+
+
+'''______________NIN______________'''
 
 class NIN_CIFAR10(Experiment_):
 	''' The Konv_VGG network trained on CIFAR10 stripped of BN and Dropout
@@ -863,7 +1182,7 @@ class NIN_CIFAR10(Experiment_):
 		return opts_net, opts_optim
 
 
-class NIN_Konv_CIFAR100(Experiment_):
+class NIN_CIFAR100(Experiment_):
 	''' The Konv_VGG network trained on CIFAR10 stripped of BN and Dropout
 	The network is trained with variations of Initialization Coefficent.
 

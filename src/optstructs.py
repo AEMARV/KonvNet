@@ -1,6 +1,10 @@
 from definition import *
 from torchvision.transforms import transforms
 import torchvision as tv
+import torch.utils
+import torch.utils.data
+from torch.utils.data import DataLoader
+
 from src.datautils.synthetic import *
 '''Model Imports'''
 def print_section(symbol='*',printer=print):
@@ -202,11 +206,13 @@ class DataOpts(opt):
 		# Obtain options from opts class
 		batchsz = opts.epocheropts.batchsz
 		isshuffle = opts.epocheropts.shuffledata
-		transform = transforms.Compose(
+		transform_train = transforms.Compose(
 			( opts.netopts.data_transforms + [transforms.ToTensor()]))
+		transform_test = transforms.Compose(
+			( [transforms.ToTensor()]))
 		# Construct loaders
-		trainset = tv.datasets.CIFAR10(PATH_DATA, train=True, download=True, transform=transform)
-		testset = tv.datasets.CIFAR10(PATH_DATA, train=False, download=True, transform=transform)
+		trainset = tv.datasets.CIFAR10(PATH_DATA, train=True, download=True, transform=transform_train)
+		testset = tv.datasets.CIFAR10(PATH_DATA, train=False, download=True, transform=transform_test)
 		train_loader = torch.utils.data.DataLoader(trainset, batch_size=batchsz, shuffle=isshuffle, sampler=None,
 		                                       num_workers=1)
 		test_loader = torch.utils.data.DataLoader(testset, batch_size=batchsz, shuffle=isshuffle, sampler=None,
@@ -217,11 +223,13 @@ class DataOpts(opt):
 		# Obtain options from opts class
 		batchsz = opts.epocheropts.batchsz
 		isshuffle = opts.epocheropts.shuffledata
-		transform = transforms.Compose(
-			reversed([transforms.ToTensor()] + opts.netopts.data_transforms))
+		transform_train = transforms.Compose(
+			(opts.netopts.data_transforms + [transforms.ToTensor()]))
+		transform_test = transforms.Compose(
+			([transforms.ToTensor()]))
 		# Construct loaders
-		trainset = tv.datasets.CIFAR100(PATH_DATA, train=True, download=True, transform=transform)
-		testset = tv.datasets.CIFAR100(PATH_DATA, train=False, download=True, transform=transform)
+		trainset = tv.datasets.CIFAR100(PATH_DATA, train=True, download=True, transform=transform_train)
+		testset = tv.datasets.CIFAR100(PATH_DATA, train=False, download=True, transform=transform_test)
 		train_loader = torch.utils.data.DataLoader(trainset, batch_size=batchsz, shuffle=isshuffle, sampler=None,
 		                                       num_workers=1)
 		test_loader = torch.utils.data.DataLoader(testset, batch_size=batchsz, shuffle=isshuffle, sampler=None,

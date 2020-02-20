@@ -355,7 +355,8 @@ class Epocher(object):
 				# Exact
 				entropy = 0
 				output = self.model(inputs,drop=True,concentration=alpha)[0]
-				# output = alpha_lnorm(output,1,alpha)
+				output = output.log_softmax(dim=1)
+				# output = alpha_lnorm(output,1,1.2)
 				# output = output - ((alpha*output).logsumexp(dim=1,keepdim=True))/alpha
 				outputfull = output
 				output = output.view(-1, self.opts.dataopts.classnum)
@@ -364,8 +365,7 @@ class Epocher(object):
 				(loss).backward()
 				output_conc= (output.detach()*alpha).log_softmax(dim=1)
 				loss_conc = self.opts.optimizeropts.loss(output_conc, labels).mean()
-
-			if batch_n % 10000== 0:
+			if batch_n % 10000== -1:
 				self.model.print(fix_batch, epoch, batch_n)
 			thisNorm = self.block_grad(list(self.model.parameters()))
 			self.optimizer.step()
@@ -500,7 +500,20 @@ class Epocher(object):
 			ret_dict[key] = f(*vals)
 		return ret_dict
 
-
+	def save_load(self):
+		state = self.epocher_state_dict(0)
+		torch.save(state,'./temp_model')
+		state_dict = torch.load('./temp_model')
+		# self.reinstantiate_model()
+		self.model.load_state_dict(state_dict['model_state'])
+		self.validate_epocher()
+	def epocher_state_dict(self,epoch):
+		state = {'model_string': self.opts.netopts.modelstring,
+		         'model_state': self.model.state_dict(),
+		         'optimizer_state': self.optimizer.state_dict(),
+		         'result': self.results.resultdict,
+		         'epoch': epoch}
+		return state
 
 	def run_many_epochs(self,path:str,save_result):
 		self.model.to(self.opts.epocheropts.device)
@@ -515,13 +528,9 @@ class Epocher(object):
 
 			self.results.add_epoch_res_dict(epochres,epoch,save_result)
 			if save_result:
-				state = {'model_string':self.opts.netopts.modelstring,
-				         'model_state':self.model.state_dict(),
-				         'opimizer_state': self.optimizer.state_dict(),
-				         'epoch':epoch}
-				if epoch% int(totalepochs/4)==0: torch.save(state,os.path.join(path,'epoch'+str(epoch)+'.model'))
-				torch.save(state,os.path.join(path,'final_model.model'))
-				torch.save(self.results.resultdict, os.path.join(path,'result_dict.res'))
+				state = self.epocher_state_dict(epoch)
+				if epoch% int(5)==0: torch.save(state,os.path.join(path,'epoch_'+str(epoch)+'.model'))
+				torch.save(state,os.path.join(path,'final_checkpoint.model'))
 			self.opts.optimizeropts.lr_sched.step()
 			#with torch.set_grad_enabled(False):
 			#	generated_images = self.model.generate(sample(outputsample,1,1)[0])
@@ -530,7 +539,27 @@ class Epocher(object):
 		self.model.to(torch.device('cpu'))
 		return self.results
 
-
+	def validate_epocher(epocher):
+		epocher.model.to(epocher.opts.epocheropts.device)
+		acc =0
+		with torch.set_grad_enabled(False):
+			totalsamples= 0
+			corrects = 0
+			for batch_n,data in enumerate(epocher.trainloader):
+				inputs, labels = data
+				inputs, labels = inputs.to(epocher.opts.epocheropts.device), labels.to(epocher.opts.epocheropts.device)
+				output = epocher.model(inputs)[0]
+				output = output.log_softmax(dim=1)
+				# output = alpha_lnorm(output,1,1.2)
+				# output = output - ((alpha*output).logsumexp(dim=1,keepdim=True))/alpha
+				outputfull = output
+				output = output.view(-1, epocher.opts.dataopts.classnum)
+				acc_temp = epocher.get_acc(output,labels)
+				loss = epocher.opts.optimizeropts.loss(output, labels).mean()
+				corrects = (corrects + loss*inputs.shape[0])
+				totalsamples += inputs.shape[0]
+				print(corrects/(totalsamples))
+				break
 	def print(self,string,end='\n'):
 		path = self.path
 		log_file = open(os.path.join(path,'log.txt'),"a")

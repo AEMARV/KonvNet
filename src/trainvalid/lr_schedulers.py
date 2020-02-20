@@ -48,5 +48,5 @@ def nin_caffe_lr( epoch):
 	return lr[epoch]
 def vgg_lr(epoch):
 	# lr = .1*(.5**(epoch//25))
-	lr = .1*(.5**(epoch//60))
+	lr = (.5**(epoch//60))
 	return lr

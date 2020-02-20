@@ -158,15 +158,11 @@ class Experiment_(object):
 			last_std_dict_list.append(last_std_dict)
 
 		torch.save( final_result_dict,os.path.join(self.result_dir,'result_dict.results'))
-		def load_setup(path:str)-> Epocher:
-			state = torch.load(path)
-			model_string = state['model_string']
-			model_state_dict = state['model_state']
-			optimizer_state_dicst = state['optimizer_state']
-			epoch= state['epoch']
 
 
-			Epocher()
+
+
+
 
 
 

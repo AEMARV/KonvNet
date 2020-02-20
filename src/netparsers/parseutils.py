@@ -83,12 +83,13 @@ def parse_layer_string(layer_string,in_n_channel,in_icnum,blockidx_dict):
 	elif layer_name_str == 'konvr':
 		ksize = int(layer_opts['r'])
 		out_states= int(layer_opts['f'])
-		out_idcomp = int(layer_opts['icnum']) if 'icunum' in layer_opts.keys() else 1
+		out_idcomp = int(layer_opts['icnum']) if 'icnum' in layer_opts.keys() else 1
 		stride = int(layer_opts['stride'])
 		init_type= (layer_opts['param'])
 		coef = float(layer_opts['coef'])
 		conc = float(layer_opts['conc'])
-		train_conc = bool(layer_opts['trainconc'])
+		train_conc = bool(layer_opts['trainconc'] in ['1', 'True'])
+		cross = bool(layer_opts['cross'] in ['1', 'True']) if 'cross' in layer_opts.keys() else False
 		isbiased = ((layer_opts['bias'] == '1')) if 'bias' in layer_opts.keys() else False
 		pad = layer_opts['pad']
 
@@ -103,6 +104,7 @@ def parse_layer_string(layer_string,in_n_channel,in_icnum,blockidx_dict):
 		               train_conc=train_conc,
 		               init_type=init_type,
 		               init_coef=coef,
+		               cross= cross,
 		               is_biased=isbiased,
 		              blockidx=blockidx)
 		out_n_channel = out_states
@@ -111,12 +113,12 @@ def parse_layer_string(layer_string,in_n_channel,in_icnum,blockidx_dict):
 	elif layer_name_str == 'konvs':
 		ksize = int(layer_opts['r'])
 		out_states= int(layer_opts['f'])
-		out_idcomp = int(layer_opts['icnum']) if 'icunum' in layer_opts.keys() else 1
+		out_idcomp = int(layer_opts['icnum']) if 'icnum' in layer_opts.keys() else 1
 		stride = int(layer_opts['stride'])
 		init_type= (layer_opts['param'])
 		coef = float(layer_opts['coef'])
 		conc = float(layer_opts['conc'])
-		train_conc = bool(layer_opts['trainconc'])
+		train_conc = bool(layer_opts['trainconc'] in ['1','True'])
 		isbiased = ((layer_opts['bias'] == '1')) if 'bias' in layer_opts.keys() else False
 		pad = layer_opts['pad']
 

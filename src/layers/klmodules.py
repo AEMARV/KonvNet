@@ -7,6 +7,7 @@ from torchvision.utils import save_image
 import math
 from definition import concentration as C
 from definition import *
+from torch.distributions.gamma import Gamma as Gamma
 
 
 class MyModule(Module):
@@ -123,9 +124,9 @@ class FConv(MyModule):
 		self.fnum = fnum
 		self.spsize= spsize
 		self.input_ch = input_ch
-		self.kernel = Parameter(torch.randn(fnum,input_ch,spsize,spsize)*init_coef)
-		self.kernel.requires_grad=True
-		self.register_parameter('weight',self.kernel)
+		self.weight = Parameter(torch.randn(fnum,input_ch,spsize,spsize)*init_coef)
+		self.weight.requires_grad=True
+		self.register_parameter('weight',self.weight)
 
 		self.bias = Parameter(torch.zeros(fnum))
 		self.bias.requires_grad = isbiased
@@ -146,7 +147,7 @@ class FConv(MyModule):
 
 		return
 	def forward(self, input):
-		y = F.conv2d(input,self.kernel,self.bias,stride=self.stride,padding=self.pad)
+		y = F.conv2d(input,self.weight,self.bias,stride=self.stride,padding=self.pad)
 		return y
 
 class FReLU(MyModule):
@@ -402,6 +403,7 @@ class Konv_R(MyModule):
 	             init_coef=1,
 	             is_biased=True,
 	             train_conc=False,
+	             cross=False,
 	             **kwargs,
 	             ):
 		super(Konv_R,self).__init__(*args,**kwargs)
@@ -417,6 +419,7 @@ class Konv_R(MyModule):
 		self.init_coef = init_coef
 		self.is_biased = is_biased
 		self.train_conc = train_conc
+		self.cross= cross,
 		filter_size =(self.out_state_num*self.out_id_comp_num,  #0
 		              self.in_state_num,  #1
 		              self.in_id_comp_num,  # 2
@@ -438,14 +441,15 @@ class Konv_R(MyModule):
 			weight = -(torch.rand(filter_size)).exponential_()
 			weight = weight/(weight.sum(dim=1,keepdim=True))
 			weight = weight.clamp(epsilon,1)
-			weight= weight.log().log_softmax(dim=1) * self.init_coef
+			weight = (weight.log() * self.init_coef).log_softmax(dim=1)
+			# weight= weight.log().log_softmax(dim=1) * self.init_coef
 			bias = torch.zeros(1, self.out_state_num, 1, 1, out_id_comp_num)
 		else:
 			raise Exception(self.init_type + "Not Implemeted")
 
 		self.weight = Parameter(data=weight,requires_grad=True)
 		self.bias = Parameter(data=bias.detach(),requires_grad=self.is_biased)
-		self.concentrate= Parameter(data=torch.ones(1)*self.concentrate)
+		self.concentrate= Parameter(data=torch.ones(1)*self.concentrate,requires_grad=train_conc)
 
 		self.register_parameter('weight',self.weight)
 		self.register_parameter('bias',self.bias)
@@ -494,6 +498,49 @@ class Konv_R(MyModule):
 			return prob
 		else:
 			Exception(self.init_type + " Not implemented")
+
+	def entropy_map(self, input):
+		inputexp = input.exp()
+		entmap = -inputexp * input
+		entmap = entmap.sum(dim=1)
+		entmap[entmap != entmap] = 0
+		entmap = entmap.permute([0, 3, 1, 2])
+		weight = self.normalize(self.weight)
+		weight = weight.sum(dim=1).detach()
+		entropy = F.conv2d(entmap, weight, stride=self.stride, padding=self.pad)
+		return entropy
+
+	def kl_xl_kp(self, input_orig):
+		input = input_orig.permute([0, 1, 4, 2, 3])
+		input = input.reshape(input.shape[0], -1, input.shape[3], input.shape[4])
+		weight = self.log_normalize(self.weight, dim=1)
+		weight = weight.reshape(weight.shape[0], -1, weight.shape[3], weight.shape[4])
+		exp_weight = weight.exp()
+
+
+		kld = F.conv2d(input, exp_weight, stride=self.stride, padding=self.pad, bias=None)
+		if not self.cross:
+			entropy_filt = self.entropy_filt_map(input_orig)
+			kld = kld + entropy_filt
+		kld = kld * self.concentrate
+		kld = kld.reshape(kld.shape[0], self.out_state_num, self.out_id_comp_num, kld.shape[2], kld.shape[3])
+		kld = kld.permute([0, 1, 3, 4, 2])
+		return kld
+	def kl_xp_kl(self, input_orig):
+		input = input_orig.permute([0, 1, 4, 2, 3])
+		input = input.reshape(input.shape[0], -1, input.shape[3], input.shape[4])
+		inputexp = input.exp()
+		weight = self.log_normalize(self.weight)
+
+		weight = weight.reshape(weight.shape[0], -1, weight.shape[3], weight.shape[4])
+		cross_entropy = F.conv2d(inputexp, weight, stride=self.stride, padding=self.pad)
+		entmap = self.entropy_map(input_orig)
+		kld = cross_entropy + entmap
+		kld = kld * self.concentrate
+		kld = kld.reshape(kld.shape[0], self.out_state_num, self.out_id_comp_num, kld.shape[2],
+		                  kld.shape[3])
+		kld = kld.permute([0, 1, 3, 4, 2])
+		return kld
 	def forward(self, input_orig):
 		''' Calculates the Konv^r of input and output
 		Input: needs to be in the log domain and normalized. The size of input is
@@ -503,21 +550,11 @@ class Konv_R(MyModule):
 		output: output is in the log domain of size (_ , #out_state, height, width, #out_id_comp)
 		and is log normalized across the first dimension
 		'''
-		input = input_orig.permute([0,1,4,2,3])
-		input = input.reshape(input.shape[0],-1,input.shape[3],input.shape[4])
-		weight = self.log_normalize(self.weight,dim=1)
-		weight= weight.reshape(weight.shape[0],-1,weight.shape[3],weight.shape[4])
-		exp_weight = weight.exp()
-
-		bias = self.log_normalize(self.bias,dim=1)
-
-		kld = F.conv2d(input,exp_weight,stride=self.stride,padding=self.pad,bias=None)
-		entropy_filt = self.entropy_filt_map(input_orig)
-		kld = kld + entropy_filt
-		kld= kld#*self.concentrate
-		kld = kld.reshape(kld.shape[0],self.out_state_num,self.out_id_comp_num,kld.shape[2],kld.shape[3])
-		kld = kld.permute([0,1,3,4,2])
-		lprob = kld+ bias
+		kld1 = self.kl_xl_kp(input_orig)
+		# kld2 = self.kl_xp_kl(input_orig)
+		bias = self.log_normalize(self.bias)
+		lprob = kld1 + bias
+		# y = lprob - logsumexpstoch(lprob*self.concentrate,1)/self.concentrate
 		y = (lprob).log_softmax(dim=1)
 		# output = output - logsumexpstoch(output,1)
 		return y
@@ -559,14 +596,13 @@ class Konv_S(Konv_R):
 		cross_entropy = F.conv2d(inputexp, weight, stride=self.stride, padding=self.pad)
 		entmap = self.entropy_map(input_orig)
 		kld = cross_entropy + entmap
+		kld = kld *self.concentrate
 		kld = kld.reshape(kld.shape[0], self.out_state_num, self.out_id_comp_num, kld.shape[2],
 		                        kld.shape[3])
 		kld = kld.permute([0, 1, 3, 4, 2])
 		kld = kld+bias
 		
 		y = kld.log_softmax(dim=1)
-		hasnan(y)
-		hasinf(y)
 		return y
 		
 

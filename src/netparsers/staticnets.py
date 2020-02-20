@@ -53,3 +53,6 @@ class StaticNet(MyModule):
 				layer_list += [layer]
 		return layer_list
 
+
+
+
